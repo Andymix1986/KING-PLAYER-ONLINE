@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Player</title>
+<style>
+body {
+margin: 0;
+background-color: #111;
+font-family: sans-serif;
+color: white;
+overflow-y: auto;
+}
+
+.container {
+padding: 20px;
+max-width: 1280px;
+margin: auto;
+text-align: center;
+}
+
+h3#titulo-serie {
+font-size: 2rem;
+margin-bottom: 15px;
+}
+
+.controls {
+display: flex;
+justify-content: center;
+gap: 10px;
+margin-bottom: 20px;
+flex-wrap: wrap;
+}
+
+.controls button,
+.controls select {
+padding: 10px;
+font-size: 1rem;
+border: none;
+border-radius: 5px;
+background: #333;
+color: white;
+transition: box-shadow 0.3s ease;
+}
+
+.controls button:focus,
+.controls select:focus {
+box-shadow: 0 0 10px #4dd0ff, 0 0 20px #4dd0ff88;
+outline: none;
+}
+
+.video-wrapper {
+position: relative;
+width: 100%;
+padding-top: 56.25%; /* 16:9 aspect ratio */
+margin-bottom: 30px;
+transition: box-shadow 0.3s ease;
+}
+
+.video-wrapper:focus-within {
+box-shadow: 0 0 10px #4dd0ff, 0 0 20px #4dd0ff88;
+border-radius: 20px;
+outline: none;
+}
+
+.video-wrapper video {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+border-radius: 20px;
+outline: none;
+}
+
+.sliders {
+padding: 0 20px 60px;
+}
+
+.slider {
+display: flex;
+overflow-x: auto;
+gap: 10px;
+margin-bottom: 20px;
+padding-bottom: 5px;
+}
+
+.episode {
+min-width: 60px;
+height: 60px;
+background: #222;
+border-radius: 6px;
+display: flex;
+align-items: center;
+justify-content: center;
+color: white;
+font-size: 1rem;
+cursor: pointer;
+outline: none;
+transition: box-shadow 0.3s ease;
+}
+
+.episode:hover,
+.episode:focus {
+box-shadow: 0 0 10px #4dd0ff, 0 0 20px #4dd0ff88;
+}
+
+.active {
+background: #4dd0ff;
+color: black;
+box-shadow: 0 0 10px #4dd0ff, 0 0 20px #4dd0ff88;
+}
+
+@media (max-width: 768px) {
+.controls {
+flex-direction: column;
+}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h3 id="titulo-serie">Título</h3>
+
+<div class="video-wrapper">
+<video id="video-player" controls tabindex="0">
+<source id="video-source" src="" type="video/mp4">
+</video>
+</div>
+</div>
+
+<div class="controls">
+<select id="season-select" tabindex="0" onchange="cambiarTemporada()">
+<option value="1">Temporada 1</option>
+</select>
+<button class="fullscreen-btn" onclick="toggleFullScreen()">
+Pantalla Completa
+</button>
+</div>
+<div class="sliders" id="sliders-container" tabindex="0" ></div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const baseVideoURL = params.get('urlbase') || '';
+const tituloSerie = params.get('titulo') || 'Título';
+const serieID = params.get('id') || 'default';
+const totalCapitulos = parseInt(params.get('total')) || 1;
+
+document.getElementById('titulo-serie').innerText = tituloSerie;
+
+const slidersContainer = document.getElementById('sliders-container');
+const videoSource = document.getElementById('video-source');
+const videoPlayer = document.getElementById('video-player');
+
+const episodiosPorSlider = Math.ceil(totalCapitulos / 4);
+let episodioActual = 1;
+let tiempoRestaurar = 0;
+let restaurandoTiempo = false;
+
+function guardarUltimoEpisodio(episodio, tiempo) {
+localStorage.setItem(`ultimoEpisodio-${serieID}`, episodio);
+localStorage.setItem(`ultimoTiempo-${serieID}`, tiempo);
+}
+
+function cargarUltimoEpisodio() {
+const episodioGuardado = parseInt(localStorage.getItem(`ultimoEpisodio-${serieID}`)) || 1;
+const tiempoGuardado = parseFloat(localStorage.getItem(`ultimoTiempo-${serieID}`)) || 0;
+cargarVideo(episodioGuardado, tiempoGuardado);
+}
+
+function cargarVideo(episodio, tiempo = 0) {
+const videoURL = `${baseVideoURL}${episodio.toString().padStart(3, '0')}.mp4`;
+videoSource.src = videoURL;
+videoPlayer.load();
+episodioActual = episodio;
+tiempoRestaurar = tiempo;
+restaurandoTiempo = true;
+marcarEpisodio(episodio);
+
+// PRELOAD ligero del siguiente episodio
+if (episodio < totalCapitulos) {
+const nextEpisode = episodio + 1;
+const nextURL = `${baseVideoURL}${nextEpisode.toString().padStart(3, '0')}.mp4`;
+const preloadLink = document.getElementById('preload-next');
+if (preloadLink) preloadLink.remove(); // Eliminar si ya existe
+
+const link = document.createElement('link');
+link.id = 'preload-next';
+link.rel = 'preload';
+link.as = 'video';
+link.href = nextURL;
+document.head.appendChild(link);
+}
+}
+
+function marcarEpisodio(episodio) {
+const episodios = document.querySelectorAll('.episode');
+episodios.forEach(ep => ep.classList.remove('active'));
+const episodioElemento = document.querySelector(`#episodio-${episodio}`);
+if (episodioElemento) {
+episodioElemento.classList.add('active');
+episodioElemento.focus();
+episodioElemento.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+}
+}
+
+function crearSliders() {
+slidersContainer.innerHTML = "";
+for (let i = 0; i < 4; i++) {
+const slider = document.createElement('div');
+slider.classList.add('slider');
+slider.tabIndex = 0;
+const inicio = i * episodiosPorSlider + 1;
+const fin = Math.min(inicio + episodiosPorSlider - 1, totalCapitulos);
+for (let j = inicio; j <= fin; j++) {
+const episodio = document.createElement('div');
+episodio.classList.add('episode');
+episodio.tabIndex = 0;
+episodio.innerText = j;
+episodio.id = `episodio-${j}`;
+episodio.onclick = () => cargarVideo(j);
+slider.appendChild(episodio);
+}
+slidersContainer.appendChild(slider);
+}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+crearSliders();
+cargarUltimoEpisodio();
+
+setInterval(() => {
+if (!videoPlayer.paused && !videoPlayer.ended) {
+guardarUltimoEpisodio(episodioActual, videoPlayer.currentTime);
+}
+}, 600000); // 10 minutos en milisegundos
+});
+
+videoPlayer.addEventListener('loadedmetadata', () => {
+if (restaurandoTiempo) {
+videoPlayer.currentTime = tiempoRestaurar;
+restaurandoTiempo = false;
+}
+});
+
+// Guarda solo cuando se pausa
+videoPlayer.addEventListener('pause', () => {
+guardarUltimoEpisodio(episodioActual, videoPlayer.currentTime);
+});
+
+// También al salir de pantalla completa
+document.addEventListener('fullscreenchange', () => {
+if (!document.fullscreenElement) {
+guardarUltimoEpisodio(episodioActual, videoPlayer.currentTime);
+}
+});
+
+function toggleFullScreen() {
+const videoPlayer = document.getElementById("video-player");
+
+if (!document.fullscreenElement) {
+if (videoPlayer.requestFullscreen) {
+videoPlayer.requestFullscreen();
+} else if (videoPlayer.webkitRequestFullscreen) {
+videoPlayer.webkitRequestFullscreen();
+} else if (videoPlayer.msRequestFullscreen) {
+videoPlayer.msRequestFullscreen();
+}
+} else {
+if (document.exitFullscreen) {
+document.exitFullscreen();
+} else if (document.webkitExitFullscreen) {
+document.webkitExitFullscreen();
+} else if (document.msExitFullscreen) {
+document.msExitFullscreen();
+}
+}
+}
+
+
+// Cargar el siguiente capítulo automáticamente
+// Cargar el siguiente capítulo automáticamente
+videoPlayer.addEventListener('ended', () => {
+if (episodioActual < totalCapitulos) {
+episodioActual++;  // Incrementar el episodio actual
+cargarVideo(episodioActual); // Cargar el siguiente episodio
+videoPlayer.play(); // Reproducir automáticamente
+}
+});
+
+// =============== CONTROL REMOTO ===================
+
+let intervalRewind = null;
+let intervalForward = null;
+
+document.addEventListener('keydown', (e) => {
+const active = document.activeElement;
+
+// Avance/retroceso continuo solo en pantalla completa
+if (document.fullscreenElement) {
+if (e.key === "ArrowRight") {
+if (!intervalForward) {
+intervalForward = setInterval(() => {
+videoPlayer.currentTime += 2;
+}, 100);
+}
+}
+if (e.key === "ArrowLeft") {
+if (!intervalRewind) {
+intervalRewind = setInterval(() => {
+videoPlayer.currentTime -= 2;
+}, 100);
+}
+}
+}
+
+// Reproducir/pausar con Enter
+if (e.key === "Enter") {
+if (videoPlayer.paused) {
+videoPlayer.play();
+} else {
+videoPlayer.pause();
+}
+}
+
+// Navegación vertical solo entre sliders
+document.addEventListener('keydown', (e) => {
+const sliders = Array.from(document.querySelectorAll('.slider'));
+const activeSlider = document.activeElement.closest('.slider');
+const currentIndex = sliders.indexOf(activeSlider);
+
+if ((e.key === 'ArrowDown' || e.key === 'Down') && currentIndex !== -1 && currentIndex < sliders.length - 1) {
+e.preventDefault();
+const nextSlider = sliders[currentIndex + 1];
+const firstEpisode = nextSlider.querySelector('.episode');
+if (firstEpisode) firstEpisode.focus();
+}
+
+if ((e.key === 'ArrowUp' || e.key === 'Up') && currentIndex > 0) {
+e.preventDefault();
+const prevSlider = sliders[currentIndex - 1];
+const firstEpisode = prevSlider.querySelector('.episode');
+if (firstEpisode) firstEpisode.focus();
+}
+});
+// Navegación horizontal ← →
+if (!document.fullscreenElement && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+const episodes = Array.from(document.querySelectorAll('.episode'));
+const index = episodes.indexOf(active);
+if (index !== -1) {
+const nextIndex = e.key === "ArrowRight" ? index + 1 : index - 1;
+if (episodes[nextIndex]) episodes[nextIndex].focus();
+}
+}
+});
+
+// Detener avance/retroceso al soltar teclas
+document.addEventListener('keyup', (e) => {
+if (e.key === "ArrowRight" && intervalForward) {
+clearInterval(intervalForward);
+intervalForward = null;
+}
+if (e.key === "ArrowLeft" && intervalRewind) {
+clearInterval(intervalRewind);
+intervalRewind = null;
+}
+});
+
+// =============== WAKE LOCK PARA PANTALLA ENCENDIDA ===================
+
+let wakeLock = null;
+
+async function activarWakeLock() {
+try {
+if ('wakeLock' in navigator) {
+wakeLock = await navigator.wakeLock.request('screen');
+console.log('Wake Lock activado');
+wakeLock.addEventListener('release', () => {
+console.log('Wake Lock liberado');
+});
+} else {
+console.warn('Wake Lock API no soportada en este navegador');
+}
+} catch (err) {
+console.error(`Error activando Wake Lock: ${err.name}, ${err.message}`);
+}
+}
+
+// Activar Wake Lock al reproducir video
+videoPlayer.addEventListener('play', activarWakeLock);
+
+// Liberar Wake Lock al pausar video
+videoPlayer.addEventListener('pause', () => {
+if (wakeLock) {
+wakeLock.release();
+wakeLock = null;
+}
+});
+</script>
+</body>
+</html>
